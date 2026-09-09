@@ -69,8 +69,12 @@ def build_record(df: pd.DataFrame, customer_id: int, relationship_priority: str,
     }
 
 
-def main() -> None:
-    df = load_customers(DATA_PATH)
+def build_snapshot(df: pd.DataFrame) -> dict:
+    """포트폴리오를 뽑아 전부 분석하고 Snapshot dict를 만든다 (파일 I/O는 안 함).
+
+    app/rm_view.py가 배포 환경에서 Snapshot 파일이 없을 때 이 함수를 그대로 불러
+    그 자리에서 만든다 — data/customers.csv 자동 생성과 같은 이유다.
+    """
     customer_ids = sorted(df["customer_id"].unique().tolist())
     portfolio = build_portfolio(customer_ids)
 
@@ -80,10 +84,10 @@ def main() -> None:
             records.append(
                 build_record(df, member["customer_id"], member["relationship_priority"], member["relationship_label"])
             )
-        except ValueError as exc:
-            print(f"건너뜀 customer_id={member['customer_id']}: {exc}")
+        except ValueError:
+            continue  # 코호트 내 건전/스트레스 표본이 부족한 극히 드문 경우 — 건너뛴다.
 
-    snapshot = {
+    return {
         "snapshot_id": datetime.now(timezone.utc).date().isoformat(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "portfolio_size": len(records),
@@ -91,9 +95,13 @@ def main() -> None:
         "records": records,
     }
 
+
+def main() -> None:
+    df = load_customers(DATA_PATH)
+    snapshot = build_snapshot(df)
     SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
     SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"생성 완료: {SNAPSHOT_PATH} ({len(records)}명)")
+    print(f"생성 완료: {SNAPSHOT_PATH} ({snapshot['portfolio_size']}명)")
 
 
 if __name__ == "__main__":

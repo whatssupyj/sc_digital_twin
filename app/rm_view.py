@@ -31,6 +31,7 @@ from rm.review_log import (
     load_reviews,
     reviewed_today_ids,
 )
+from scripts.build_rm_snapshot import build_snapshot
 
 SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / "data" / "rm_snapshot.json"
 CURRENT_MONTH = 12
@@ -58,11 +59,13 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     st.caption("저장된 월별 분석 결과만 봅니다 — 지금 다시 매칭하거나 분기점을 재계산하지 않습니다.")
 
     if not SNAPSHOT_PATH.exists():
-        st.warning(
-            "아직 생성된 Snapshot이 없습니다. 아래 명령으로 먼저 만들어주세요.\n\n"
-            "`python -m scripts.build_rm_snapshot`"
-        )
-        return
+        # ponytail: data/customers.csv와 같은 이유 — 배포 환경엔 이 파일이 git에 없다.
+        # scripts/build_rm_snapshot.py를 사람이 직접 돌릴 수 없는 환경이라 그 자리에서 만든다.
+        with st.spinner("RM Portfolio 100명 분석 중입니다 (최초 1회만)..."):
+            SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+            SNAPSHOT_PATH.write_text(
+                json.dumps(build_snapshot(df), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     snapshot = load_snapshot(str(SNAPSHOT_PATH))
     reviews = load_reviews()
