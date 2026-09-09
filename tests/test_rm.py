@@ -9,6 +9,7 @@ from rm.daily_review import (
     classify_timing,
     is_customer_at_risk_now,
     resolve_follow_up_due,
+    sort_by_priority,
 )
 from rm.portfolio import RELATIONSHIP_LABELS, build_portfolio
 from rm.review_log import append_review, due_follow_ups, load_reviews, reviewed_today_ids
@@ -65,26 +66,64 @@ def test_classify_timing_mid_range_is_upcoming():
     assert classify_timing(months_from_current=3, is_reliable=True, is_at_risk_now=True) == UPCOMING
 
 
+def _record(customer_id, priority="STANDARD", months_from_current=0, timing_bucket=REVIEW_NOW):
+    return {
+        "customer_id": customer_id,
+        "timing_bucket": timing_bucket,
+        "relationship_priority": priority,
+        "divergence": {"months_from_current": months_from_current},
+    }
+
+
 def test_build_worklist_buckets_and_completed_override():
     records = [
-        {"customer_id": 1, "timing_bucket": REVIEW_NOW},
-        {"customer_id": 2, "timing_bucket": UPCOMING},
-        {"customer_id": 3, "timing_bucket": REVIEW_NOW},
+        _record(1, timing_bucket=REVIEW_NOW),
+        _record(2, timing_bucket=UPCOMING),
+        _record(3, timing_bucket=REVIEW_NOW),
     ]
     buckets = build_worklist(records, completed_customer_ids={3})
     assert [r["customer_id"] for r in buckets[REVIEW_NOW]] == [1]
     assert [r["customer_id"] for r in buckets[COMPLETED_TODAY]] == [3]
 
 
+def test_build_worklist_sorts_buckets_by_priority():
+    records = [
+        _record(1, priority="STANDARD", months_from_current=0),
+        _record(2, priority="CORE", months_from_current=1),
+        _record(3, priority="PRIORITY", months_from_current=0),
+    ]
+    buckets = build_worklist(records, completed_customer_ids=set())
+    assert [r["customer_id"] for r in buckets[REVIEW_NOW]] == [2, 3, 1]
+
+
+def test_sort_by_priority_breaks_ties_by_closer_timing():
+    records = [
+        _record(1, priority="CORE", months_from_current=3),
+        _record(2, priority="CORE", months_from_current=-1),
+    ]
+    assert [r["customer_id"] for r in sort_by_priority(records)] == [2, 1]
+
+
 def test_resolve_follow_up_due_excludes_customers_completed_today():
     """date_input 기본값이 오늘이라, 오늘 등록한 FOLLOW_UP은 완료 목록과 겹치기 쉽다 —
     완료 목록에 있으면 후속상담 예정에서는 빠져야 같은 사람이 두 곳에 안 뜬다."""
-    records = [
-        {"customer_id": 1},
-        {"customer_id": 2},
+    records = [_record(1), _record(2)]
+    due_reviews = [
+        {"customer_id": 1, "follow_up_date": "2026-09-01"},
+        {"customer_id": 2, "follow_up_date": "2026-09-05"},
     ]
-    due = resolve_follow_up_due(records, due_customer_ids={1, 2}, completed_customer_ids={1})
+    due = resolve_follow_up_due(records, due_reviews, completed_customer_ids={1})
     assert [r["customer_id"] for r in due] == [2]
+
+
+def test_resolve_follow_up_due_orders_most_overdue_first():
+    records = [_record(1), _record(2)]
+    due_reviews = [
+        {"customer_id": 1, "follow_up_date": "2026-09-05"},
+        {"customer_id": 2, "follow_up_date": "2026-08-20"},  # 더 오래 지남 -> 먼저
+    ]
+    due = resolve_follow_up_due(records, due_reviews, completed_customer_ids=set())
+    assert [r["customer_id"] for r in due] == [2, 1]
 
 
 def test_review_log_append_only_round_trip(tmp_path):

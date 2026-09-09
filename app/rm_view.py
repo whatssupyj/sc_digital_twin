@@ -71,11 +71,26 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     reviews = load_reviews()
     completed_ids = reviewed_today_ids(reviews)
     buckets = build_worklist(snapshot["records"], completed_ids)
-
-    due_customer_ids = {review["customer_id"] for review in due_follow_ups(reviews)}
-    buckets[FOLLOW_UP_DUE] = resolve_follow_up_due(snapshot["records"], due_customer_ids, completed_ids)
+    buckets[FOLLOW_UP_DUE] = resolve_follow_up_due(snapshot["records"], due_follow_ups(reviews), completed_ids)
 
     st.caption(f"Snapshot 기준일: {snapshot['snapshot_id']} · 담당 포트폴리오 {snapshot['portfolio_size']}명")
+
+    record_by_id = {record["customer_id"]: record for record in snapshot["records"]}
+    search_id = st.number_input(
+        "고객 ID로 바로 찾기 (오늘 목록에 없어도 담당 포트폴리오면 조회됩니다)",
+        min_value=0,
+        step=1,
+        value=0,
+        key="rm_search_id",
+    )
+    if search_id:
+        found = record_by_id.get(int(search_id))
+        if found is None:
+            st.warning(f"고객 {int(search_id)}은 담당 포트폴리오(100명)에 없습니다.")
+        else:
+            st.divider()
+            render_customer_detail(df, found, snapshot["snapshot_id"], reviews)
+            return
 
     bucket_keys = [REVIEW_NOW, UPCOMING, MONITOR, FOLLOW_UP_DUE, COMPLETED_TODAY]
     cols = st.columns(len(bucket_keys))
