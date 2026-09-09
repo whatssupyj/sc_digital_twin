@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check --fix $CLAUDE_FILE_PATHS 2>/dev/null; ruff format $CLAUDE_FILE_PATHS 2>/dev/null; true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qE 'pip install (torch|tensorflow|xgboost|lightgbm)' && echo 'BLOCKED: ML 학습 라이브러리 설치 금지 — 이 프로젝트는 예측 모델이 아님 (CLAUDE.md 절대 규칙 1)' && exit 2; exit 0"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && pytest tests/ -x -q --tb=no 2>/dev/null | tail -1; true"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true
+  }
+}
