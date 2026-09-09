@@ -1,7 +1,7 @@
 """RM이 고객을 확인한 결과를 남기는 append-only 로그 (JSONL, 수정·삭제 없음)."""
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 RESULT_COMPLETED = "COMPLETED"
@@ -72,3 +72,9 @@ def due_follow_ups(reviews: list[dict], today: str | None = None) -> list[dict]:
         and review.get("follow_up_date")
         and review["follow_up_date"] <= resolved_today
     ]
+
+
+def days_since(iso_date_or_datetime: str, today: str | None = None) -> int:
+    """ISO 날짜(또는 날짜시각) 문자열로부터 오늘까지 며칠 지났는지 계산한다."""
+    resolved_today = date.fromisoformat(today) if today else datetime.now(timezone.utc).date()
+    return (resolved_today - date.fromisoformat(iso_date_or_datetime[:10])).days

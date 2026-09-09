@@ -25,7 +25,8 @@ TOTAL_MONTHS = 36
 TOP_N = 200
 
 
-def build_record(df: pd.DataFrame, customer_id: int, relationship_priority: str, relationship_label: str) -> dict:
+def build_record(df: pd.DataFrame, member: dict) -> dict:
+    customer_id = member["customer_id"]
     result = analyze_cohort(df, customer_id, observed_months=CURRENT_MONTH, top_n=TOP_N, total_months=TOTAL_MONTHS)
     divergence = result.divergence
 
@@ -52,8 +53,9 @@ def build_record(df: pd.DataFrame, customer_id: int, relationship_priority: str,
 
     return {
         "customer_id": customer_id,
-        "relationship_priority": relationship_priority,
-        "relationship_label": relationship_label,
+        "relationship_priority": member["relationship_priority"],
+        "relationship_label": member["relationship_label"],
+        "rm_id": member["rm_id"],
         "current_summary": {
             "savings_rate": round(float(current_row["savings_rate"]), 4),
             "spending_growth": round(float(current_row["spending_growth"]), 4),
@@ -81,9 +83,7 @@ def build_snapshot(df: pd.DataFrame) -> dict:
     records = []
     for member in portfolio:
         try:
-            records.append(
-                build_record(df, member["customer_id"], member["relationship_priority"], member["relationship_label"])
-            )
+            records.append(build_record(df, member))
         except ValueError:
             continue  # 코호트 내 건전/스트레스 표본이 부족한 극히 드문 경우 — 건너뛴다.
 

@@ -26,6 +26,7 @@ from rm.review_log import (
     RESULT_FOLLOW_UP,
     RESULT_MONITOR,
     append_review,
+    days_since,
     due_follow_ups,
     latest_review_by_customer,
     load_reviews,
@@ -69,15 +70,25 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
 
     snapshot = load_snapshot(str(SNAPSHOT_PATH))
     reviews = load_reviews()
+    latest_by_id = latest_review_by_customer(reviews)
+
+    rm_ids = sorted({record["rm_id"] for record in snapshot["records"]})
+    rm_filter = st.selectbox("담당 RM", ["전체"] + rm_ids, key="rm_filter")
+    records_in_scope = (
+        snapshot["records"]
+        if rm_filter == "전체"
+        else [record for record in snapshot["records"] if record["rm_id"] == rm_filter]
+    )
+
     completed_ids = reviewed_today_ids(reviews)
-    buckets = build_worklist(snapshot["records"], completed_ids)
-    buckets[FOLLOW_UP_DUE] = resolve_follow_up_due(snapshot["records"], due_follow_ups(reviews), completed_ids)
+    buckets = build_worklist(records_in_scope, completed_ids)
+    buckets[FOLLOW_UP_DUE] = resolve_follow_up_due(records_in_scope, due_follow_ups(reviews), completed_ids)
 
-    st.caption(f"Snapshot 기준일: {snapshot['snapshot_id']} · 담당 포트폴리오 {snapshot['portfolio_size']}명")
+    st.caption(f"Snapshot 기준일: {snapshot['snapshot_id']} · 담당 포트폴리오 {len(records_in_scope)}명")
 
-    record_by_id = {record["customer_id"]: record for record in snapshot["records"]}
+    record_by_id = {record["customer_id"]: record for record in records_in_scope}
     search_id = st.number_input(
-        "고객 ID로 바로 찾기 (오늘 목록에 없어도 담당 포트폴리오면 조회됩니다)",
+        "고객 ID로 바로 찾기 (오늘 목록에 없어도 위에서 고른 담당 범위면 조회됩니다)",
         min_value=0,
         step=1,
         value=0,
@@ -86,7 +97,7 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     if search_id:
         found = record_by_id.get(int(search_id))
         if found is None:
-            st.warning(f"고객 {int(search_id)}은 담당 포트폴리오(100명)에 없습니다.")
+            st.warning(f"고객 {int(search_id)}은 이 담당 범위에 없습니다.")
         else:
             st.divider()
             render_customer_detail(df, found, snapshot["snapshot_id"], reviews)
@@ -109,11 +120,14 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
         st.info("이 목록에는 현재 해당하는 고객이 없습니다.")
         return
 
-    selected_record = st.selectbox(
-        "고객 선택",
-        records,
-        format_func=lambda record: f"{record['customer_id']} · {record['relationship_label']}",
-    )
+    def format_customer_option(record: dict) -> str:
+        label = f"{record['customer_id']} · {record['relationship_label']}"
+        previous = latest_by_id.get(record["customer_id"])
+        if previous:
+            label += f" · 마지막 확인 {days_since(previous['reviewed_at'])}일 전"
+        return label
+
+    selected_record = st.selectbox("고객 선택", records, format_func=format_customer_option)
     st.divider()
     render_customer_detail(df, selected_record, snapshot["snapshot_id"], reviews)
 
@@ -125,10 +139,12 @@ def render_customer_detail(df: pd.DataFrame, record: dict, snapshot_id: str, rev
 
     previous_review = latest_review_by_customer(reviews).get(customer_id)
     if previous_review is not None:
+        days = days_since(previous_review["reviewed_at"])
+        day_text = "오늘" if days == 0 else f"{days}일 전"
         note_part = f" · {previous_review['note']}" if previous_review.get("note") else ""
         purpose_part = f" · 다음 목적: {previous_review['follow_up_purpose']}" if previous_review.get("follow_up_purpose") else ""
         st.caption(
-            f"이전 확인: {previous_review['reviewed_at'][:10]} · "
+            f"이전 확인: {day_text} ({previous_review['reviewed_at'][:10]}) · "
             f"{RESULT_LABELS.get(previous_review['result'], previous_review['result'])}{note_part}{purpose_part}"
         )
 

@@ -11,8 +11,8 @@ from rm.daily_review import (
     resolve_follow_up_due,
     sort_by_priority,
 )
-from rm.portfolio import RELATIONSHIP_LABELS, build_portfolio
-from rm.review_log import append_review, due_follow_ups, load_reviews, reviewed_today_ids
+from rm.portfolio import RELATIONSHIP_LABELS, RM_IDS, build_portfolio
+from rm.review_log import append_review, days_since, due_follow_ups, load_reviews, reviewed_today_ids
 
 
 def test_build_portfolio_is_deterministic_and_correct_size():
@@ -34,9 +34,32 @@ def test_build_portfolio_relationship_ratio_matches_config():
 
 
 def test_build_portfolio_signature_takes_only_customer_ids():
-    """관계중요도 배정 함수는 customer_id만 받는다 — 재무 데이터를 인자로 받을 수조차 없다."""
+    """배정 함수는 customer_id만 받는다 — 재무 데이터를 인자로 받을 수조차 없다."""
     params = list(inspect.signature(build_portfolio).parameters)
-    assert params == ["customer_ids", "size", "portfolio_seed", "relationship_seed"]
+    assert params == [
+        "customer_ids",
+        "size",
+        "portfolio_seed",
+        "relationship_seed",
+        "rm_assignment_seed",
+        "rm_ids",
+    ]
+
+
+def test_build_portfolio_assigns_every_customer_a_known_rm():
+    ids = list(range(1000, 6000))
+    portfolio = build_portfolio(ids, size=100)
+    rm_counts = {rm_id: 0 for rm_id in RM_IDS}
+    for member in portfolio:
+        assert member["rm_id"] in RM_IDS
+        rm_counts[member["rm_id"]] += 1
+    assert sum(rm_counts.values()) == 100
+    assert all(count == 20 for count in rm_counts.values())  # 100명 / 5 RM = 균등 분배
+
+
+def test_days_since_computes_whole_days():
+    assert days_since("2026-09-01", today="2026-09-10") == 9
+    assert days_since("2026-09-10T03:00:00+00:00", today="2026-09-10") == 0
 
 
 def test_is_customer_at_risk_now_respects_direction():
