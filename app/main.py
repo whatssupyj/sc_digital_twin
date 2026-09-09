@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from app.charts import build_outcome_pie_chart, build_product_pie_chart, build_trajectory_figure
+from app.rm_view import render_rm_daily_review
 from data_gen.generate import generate_population
 from engine.cohort import CohortResult, analyze_cohort
 from engine.loader import load_customers
@@ -160,8 +161,6 @@ def render_action_card(result: CohortResult) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="FinTwin — 코호트 궤적 디지털 트윈", layout="wide")
-    st.title("FinTwin — 코호트 궤적 디지털 트윈")
-    st.caption("예측하지 않습니다. 같은 길을 먼저 걸은 사람들의 실제 결과를 보여드립니다.")
 
     if not DATA_PATH.exists():
         # ponytail: 서버 첫 배포 시 data/는 git에 없다(재생성 가능해야 하는 규칙) — 없으면 그 자리에서 만든다.
@@ -169,8 +168,16 @@ def main() -> None:
         generate_population(n=5000, months=TOTAL_MONTHS, seed=42).to_csv(DATA_PATH, index=False, encoding="utf-8-sig")
 
     df = load_data(str(DATA_PATH))
-    customer_ids = sorted(df["customer_id"].unique().tolist())
 
+    app_mode = st.sidebar.radio("화면", ["고객 상담", "RM 오늘의 업무"], key="app_mode")
+    if app_mode == "RM 오늘의 업무":
+        render_rm_daily_review(df)
+        return
+
+    st.title("FinTwin — 코호트 궤적 디지털 트윈")
+    st.caption("예측하지 않습니다. 같은 길을 먼저 걸은 사람들의 실제 결과를 보여드립니다.")
+
+    customer_ids = sorted(df["customer_id"].unique().tolist())
     customer_id = render_customer_selector(customer_ids)
 
     try:
