@@ -4,7 +4,12 @@
 → ③ 위험 분기점 → ④ 지금 무엇을 바꿔야 하는가
 """
 
+import sys
 from pathlib import Path
+
+# ponytail: streamlit run app/main.py만 sys.path에 app/ 자기 자신을 넣어줄 뿐 repo
+# 루트는 안 넣는다(로컬은 cwd가 겹쳐서 안 터지고 Streamlit Cloud는 터짐) — 루트를 직접 추가.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 import streamlit as st
