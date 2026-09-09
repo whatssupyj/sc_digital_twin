@@ -88,7 +88,7 @@ def render_cohort_outcomes(df: pd.DataFrame, result: CohortResult, customer_id: 
         current_month=CURRENT_MONTH,
         variable=result.divergence.variable,
         variable_label=VARIABLE_LABELS.get(result.divergence.variable, result.divergence.variable),
-        divergence_month=result.divergence.month,
+        divergence_month=result.divergence.month if result.divergence.is_reliable else None,
         total_months=TOTAL_MONTHS,
     )
     st.plotly_chart(fig, width="stretch")
@@ -104,6 +104,15 @@ def render_cohort_outcomes(df: pd.DataFrame, result: CohortResult, customer_id: 
 def render_divergence_countdown(result: CohortResult) -> None:
     st.subheader("③ 위험 분기점 — 두 갈래 길은 언제 갈라졌는가")
     divergence = result.divergence
+
+    if not divergence.is_reliable:
+        st.success(
+            f"유사 고객 {result.outcomes.cohort_size}명 대부분이 안정적인 경로를 유지했습니다 — "
+            "뚜렷하게 갈라지는 분기점이 나타나지 않았습니다."
+        )
+        st.caption("코호트 내 건전/스트레스 그룹 차이가 충분히 크지 않아, 특정 시점을 분기점으로 단정하지 않습니다.")
+        return
+
     gap = divergence.month - CURRENT_MONTH
 
     if gap > 0:
@@ -126,6 +135,17 @@ def render_divergence_countdown(result: CohortResult) -> None:
 def render_action_card(result: CohortResult) -> None:
     st.subheader("④ 지금 무엇을 바꿔야 하는가")
     divergence = result.divergence
+
+    if not divergence.is_reliable:
+        with st.container(border=True):
+            st.markdown("#### 권장 행동")
+            st.markdown("지금의 재무 흐름을 유지하세요.")
+            st.caption(
+                f"{CURRENT_MONTH}개월 궤적이 유사한 {result.outcomes.cohort_size}명 대부분이 안정적으로 유지했습니다 — "
+                "특정 지표를 개선해야 할 뚜렷한 신호는 없습니다."
+            )
+        return
+
     label = VARIABLE_LABELS.get(divergence.variable, divergence.variable)
     direction = "위" if divergence.higher_is_healthier else "아래"
 

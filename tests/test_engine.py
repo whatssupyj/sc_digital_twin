@@ -175,6 +175,34 @@ def test_find_divergence_point_detects_known_split_month():
 
     assert (month, variable) == (6, "dsr")
     assert threshold == pytest.approx(0.225, abs=1e-6)
+    assert point.is_reliable is True  # 뚜렷하게 갈라지므로 신뢰 가능
+
+
+def test_divergence_is_unreliable_when_groups_barely_differ():
+    """두 그룹 평균이 그룹 내 변동보다 훨씬 작게 벌어져 있으면(effect_size < 0.5)
+    분기점이 노이즈일 수 있으므로 is_reliable=False여야 한다."""
+    months = 5
+    healthy_values = {1: 0.196, 2: 0.200, 3: 0.204}
+    stress_values = {4: 0.197, 5: 0.201, 6: 0.205}
+
+    rows = []
+    for customer_id, dsr in {**healthy_values, **stress_values}.items():
+        for month in range(1, months + 1):
+            rows.append(
+                {
+                    "customer_id": customer_id,
+                    "month": month,
+                    "savings_rate": 0.15,
+                    "spending_growth": 0.01,
+                    "dsr": dsr,
+                    "outcome_label": "HEALTHY" if customer_id in healthy_values else "STRESS",
+                }
+            )
+    df = pd.DataFrame(rows)
+
+    point = find_divergence_point(df, list(healthy_values) + list(stress_values), months=months)
+    assert point.effect_size < 0.5
+    assert point.is_reliable is False
 
 
 def test_analyze_cohort_end_to_end(population_df):
