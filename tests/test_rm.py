@@ -150,15 +150,31 @@ def test_resolve_follow_up_due_orders_most_overdue_first():
 
 
 def test_review_log_append_only_round_trip(tmp_path):
-    log_path = tmp_path / "reviews.jsonl"
-    append_review(1001, "2026-09-10", "COMPLETED", note="확인함", log_path=log_path)
-    append_review(1002, "2026-09-10", "FOLLOW_UP", follow_up_date="2026-10-01", follow_up_purpose="재확인", log_path=log_path)
+    db_path = tmp_path / "reviews.db"
+    append_review(1001, "2026-09-10", "COMPLETED", note="확인함", db_path=db_path)
+    append_review(1002, "2026-09-10", "FOLLOW_UP", follow_up_date="2026-10-01", follow_up_purpose="재확인", db_path=db_path)
 
-    reviews = load_reviews(log_path)
+    reviews = load_reviews(db_path)
     assert len(reviews) == 2
     assert reviews[0]["customer_id"] == 1001
     assert reviews[1]["follow_up_purpose"] == "재확인"
     assert reviewed_today_ids(reviews) == {1001, 1002}
+
+
+def test_review_db_rejects_update_and_delete(tmp_path):
+    """append-only가 관례가 아니라 DB 제약이라는 걸 확인한다 — 트리거가 직접 막는다."""
+    import sqlite3
+
+    import pytest
+
+    db_path = tmp_path / "reviews.db"
+    append_review(1001, "2026-09-10", "COMPLETED", db_path=db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("UPDATE reviews SET note = 'changed'")
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("DELETE FROM reviews")
 
 
 def test_due_follow_ups_includes_past_and_today_dates():
