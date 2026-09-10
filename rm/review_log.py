@@ -1,8 +1,8 @@
-"""RM이 고객을 확인한 결과를 남기는 append-only 로그 — SQLite에 저장한다.
+"""Append-only log of an RM's review outcomes for a customer — stored in SQLite.
 
-수정·삭제 API를 안 만드는 정도가 아니라, DB 트리거로 UPDATE/DELETE 자체를
-막는다 — 여러 RM이 동시에 기록해도 SQLite가 쓰기를 직렬화해주고, 잠금 파일
-충돌이나 "전체 라인 다시 읽기" 문제 없이 안전하다.
+We don't just avoid building an update/delete API — a DB trigger blocks UPDATE/DELETE
+outright. Multiple RMs writing at the same time is safe too: SQLite serializes the writes for
+us, with no lock-file contention or "re-read the whole file" problem.
 """
 
 import sqlite3
@@ -45,7 +45,7 @@ END;
 def _connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")  # 동시 읽기/쓰기를 SQLite가 직렬화하게 함
+    conn.execute("PRAGMA journal_mode=WAL")  # lets SQLite serialize concurrent reads/writes
     conn.executescript(_SCHEMA)
     conn.row_factory = sqlite3.Row
     return conn
@@ -60,7 +60,7 @@ def append_review(
     follow_up_purpose: str | None = None,
     db_path: Path = DEFAULT_DB_PATH,
 ) -> dict:
-    """확인 결과 한 줄을 DB에 추가한다."""
+    """Appends one review-outcome row to the DB."""
     record = {
         "customer_id": int(customer_id),
         "snapshot_id": snapshot_id,
@@ -94,7 +94,7 @@ def reviewed_today_ids(reviews: list[dict]) -> set[int]:
 
 
 def latest_review_by_customer(reviews: list[dict]) -> dict[int, dict]:
-    """고객별 가장 최근 확인 결과만 남긴다 (SELECT가 review_id 순으로 오므로 마지막 기록이 이긴다)."""
+    """Keeps only each customer's most recent review (rows arrive ordered by review_id, so the last one wins)."""
     latest: dict[int, dict] = {}
     for review in reviews:
         latest[review["customer_id"]] = review
@@ -102,11 +102,11 @@ def latest_review_by_customer(reviews: list[dict]) -> dict[int, dict]:
 
 
 def due_follow_ups(reviews: list[dict], today: str | None = None) -> list[dict]:
-    """예정일이 오늘이거나 지난 후속상담만 반환한다.
+    """Returns only the follow-ups whose scheduled date is today or earlier.
 
-    고객별 가장 최근 확인 결과만 보고, 그게 FOLLOW_UP이 아니면(그 뒤에 다시
-    확인했거나 모니터링으로 바뀌었으면) 더는 "예정된" 후속상담이 아니다 —
-    새 기록을 추가하는 것만으로 예전 예정을 지운 것과 같은 효과를 낸다.
+    Looks only at each customer's most recent review, and if that isn't a FOLLOW_UP (because
+    they were reviewed again since, or moved to monitoring), it's no longer a "scheduled"
+    follow-up at all — simply adding a new record has the effect of clearing the old one.
     """
     resolved_today = today or datetime.now(timezone.utc).date().isoformat()
     latest = latest_review_by_customer(reviews)
@@ -120,6 +120,6 @@ def due_follow_ups(reviews: list[dict], today: str | None = None) -> list[dict]:
 
 
 def days_since(iso_date_or_datetime: str, today: str | None = None) -> int:
-    """ISO 날짜(또는 날짜시각) 문자열로부터 오늘까지 며칠 지났는지 계산한다."""
+    """Computes how many days have passed from an ISO date (or datetime) string to today."""
     resolved_today = date.fromisoformat(today) if today else datetime.now(timezone.utc).date()
     return (resolved_today - date.fromisoformat(iso_date_or_datetime[:10])).days

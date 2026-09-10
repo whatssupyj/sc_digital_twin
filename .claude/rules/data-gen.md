@@ -3,8 +3,8 @@ paths:
   - "data_gen/**/*.py"
 ---
 
-# 합성 데이터 생성 규칙
-- 모든 랜덤 함수는 `np.random.default_rng(seed)` 인스턴스를 명시적으로 받을 것. 전역 시드 금지.
-- 페르소나별 생성 규칙은 상수 dict로 파일 상단에 모아둘 것 (매직 넘버 인라인 금지).
-- 생성된 값의 범위 검증 필수: 저축률 [-1, 1], DSR [0, 3], 소득 > 0.
-- 출력 CSV 스키마 변경 시 CLAUDE.md의 도메인 용어 섹션과 engine/ 쪽 로더를 함께 수정할 것.
+# Synthetic Data Generation Rules
+- Every random function must explicitly take an `np.random.default_rng(seed)` instance. No global seeds.
+- Per-persona generation rules must be collected into constant dicts at the top of the file (no inline magic numbers).
+- Generated values must be range-validated: savings rate [-1, 1], DSR [0, 3], income > 0.
+- If the output CSV schema changes, update both the Domain Terms section of CLAUDE.md and the engine/ loader together.

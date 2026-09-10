@@ -1,18 +1,18 @@
 ---
 name: demo-check
-description: 데모 리허설 전 전체 파이프라인 점검. /demo-check 로 호출.
+description: Full pipeline check before a demo rehearsal. Invoke with /demo-check.
 ---
 
-# 데모 점검 체크리스트
+# Demo Check Checklist
 
-다음을 순서대로 실행하고 각 항목의 통과 여부를 표로 보고하라.
+Run the following in order and report each item's pass/fail in a table.
 
-1. `python -m data_gen.generate --n 5000 --months 36 --seed 42` 실행
-   → data/customers.csv 존재, 행 수 = 5000 × 36 확인
-2. `pytest tests/ -x -q` 전체 통과 확인
-3. customer_id=1001의 코호트 매칭 실행
-   → 코호트 크기 150~250 범위인지, STRESS 비율이 25~40% 범위인지 확인
-   (데모 대사 "31%가 스트레스 진입"과 크게 어긋나면 경고)
-4. 분기점 분석 결과가 (월차, 변수명, 임계값) 3요소를 모두 반환하는지 확인
-5. `streamlit run app/main.py` 기동 후 5초 내 에러 로그 없는지 확인
-6. 실패 항목이 있으면 원인 파일과 수정 제안을 함께 보고
+1. Run `python -m data_gen.generate --n 5000 --months 36 --seed 42`
+   → confirm data/customers.csv exists and row count = 5000 × 36
+2. Confirm `pytest tests/ -x -q` passes fully
+3. Run cohort matching for customer_id=1001
+   → confirm cohort size is in the 150-250 range and the STRESS ratio is in the 25-40% range
+   (warn if it drifts far from the demo line "31% entered STRESS")
+4. Confirm the divergence-point analysis returns all three of (month, variable name, threshold)
+5. Confirm no error logs within 5 seconds of starting `streamlit run app/main.py`
+6. If anything fails, report the offending file along with a suggested fix

@@ -1,4 +1,4 @@
-"""궤적 유사도 기반 코호트 매칭. 학습 없음 — pairwise 거리 계산만 사용."""
+"""Trajectory-similarity based cohort matching. No training — pairwise distance computation only."""
 
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -13,14 +13,15 @@ def find_cohort(
     top_n: int = 200,
     variables: tuple[str, ...] = DEFAULT_VARIABLES,
 ) -> list[tuple[int, float]]:
-    """대상 고객과 궤적이 유사한 상위 top_n명을 (customer_id, similarity_score) 정렬 리스트로 반환.
+    """Returns the top_n customers whose trajectory is most similar to the target, as a sorted
+    (customer_id, similarity_score) list.
 
-    similarity_score는 코사인 유사도 (-1~1, 1에 가까울수록 유사). dict를 반환하지 않는다.
+    similarity_score is cosine similarity (-1 to 1, closer to 1 means more similar). Never returns a dict.
     """
     customer_ids, matrix = build_trajectory_matrix(df, observed_months, variables)
 
     if target_customer_id not in customer_ids:
-        raise ValueError(f"customer_id={target_customer_id}가 데이터에 없습니다.")
+        raise ValueError(f"customer_id={target_customer_id} not found in the data.")
 
     normalized = zscore_normalize(matrix)
     target_idx = int(np.where(customer_ids == target_customer_id)[0][0])

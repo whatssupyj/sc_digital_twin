@@ -1,4 +1,4 @@
-"""코호트 내 건전/스트레스 그룹의 분기점(시점+변수+임계값) 분석."""
+"""Analyzes the divergence point (when + which variable + threshold) between the healthy/stress groups in a cohort."""
 
 from dataclasses import dataclass
 
@@ -7,43 +7,44 @@ import pandas as pd
 from engine.loader import DEFAULT_VARIABLES
 
 VARIABLE_LABELS = {
-    "savings_rate": "저축률",
-    "spending_growth": "지출증가율",
+    "savings_rate": "Savings Rate",
+    "spending_growth": "Spending Growth",
     "dsr": "DSR",
 }
 
-# Cohen's d 기준: 이 값을 처음 넘는 시점을 "갈린 지점"으로 본다 (중간 정도 효과크기).
+# Cohen's d threshold: the first month this value is crossed is treated as the "split point" (a medium effect size).
 EFFECT_SIZE_THRESHOLD = 0.5
 
-# 코호트가 한쪽으로 크게 쏠려 있으면(예: 소수 그룹이 200명 중 20~30명) 36개월 x 3변수
-# = 108개 조합 중 하나가 우연히 effect_size 0.5를 넘기 쉽다(다중비교 노이즈).
-# 소수 그룹이 코호트의 이 비율 미만이면 신뢰하지 않는다 — validate_divergence.py로
-# 실측: STABLE 위주 코호트는 전부 0.23 이하였고, 실제로 예측이 동전던지기보다 나빴다.
+# If a cohort is heavily skewed toward one side (e.g. the minority group is only 20-30 of 200),
+# it's easy for one of the 36 months x 3 variables = 108 combinations to cross effect_size 0.5
+# by pure chance (multiple-comparison noise). We don't trust a divergence point whose minority
+# group is below this ratio of the cohort — validated empirically with validate_divergence.py:
+# STABLE-heavy cohorts were all at or below 0.23, and prediction was actually worse than a coin flip.
 MINORITY_RATIO_THRESHOLD = 0.25
 
 
 @dataclass(frozen=True)
 class DivergencePoint:
-    month: int          # 시점(월차)
-    variable: str        # 변수명
-    threshold: float     # 임계값
-    effect_size: float   # 두 그룹 분리 강도 (참고용)
-    higher_is_healthier: bool  # True면 임계값보다 높은 쪽이 HEALTHY 그룹
-    minority_ratio: float  # min(건전, 스트레스) / 코호트 전체 — 이 분기점을 계산한 코호트의 구성비
+    month: int          # the month
+    variable: str        # variable name
+    threshold: float     # threshold value
+    effect_size: float   # strength of the split between the two groups (informational)
+    higher_is_healthier: bool  # True if the side above the threshold is the HEALTHY group
+    minority_ratio: float  # min(healthy, stress) / cohort size — composition of the cohort this point was computed from
 
     @property
     def is_reliable(self) -> bool:
-        """effect_size가 낮거나(노이즈 수준) 코호트가 한쪽으로 너무 쏠려 있으면 False.
+        """False if the effect size is low (noise level) or the cohort is too skewed to one side.
 
-        둘 다 화면에서 확신 있는 문구로 보여주면 안 되는 신호다: effect_size 미달은
-        그룹이 아예 안 갈렸다는 뜻이고, minority_ratio 미달은 소수 그룹이 너무 작아
-        108개 조합 중 우연히 하나 걸린 결과일 수 있다는 뜻이다.
+        Neither signal should be shown on screen with confident phrasing: a low effect_size
+        means the groups never really split, and a low minority_ratio means the minority group
+        was small enough that this could just be one lucky hit out of 108 comparisons.
         """
         return bool(self.effect_size >= EFFECT_SIZE_THRESHOLD and self.minority_ratio >= MINORITY_RATIO_THRESHOLD)
 
     def to_phrase(self) -> str:
         label = VARIABLE_LABELS.get(self.variable, self.variable)
-        return f"갈린 지점은 {self.month}개월차, {label}이 {self.threshold}를 넘어선 순간"
+        return f"The split happened at month {self.month} — the moment {label} crossed {self.threshold}"
 
 
 def find_divergence_point(
@@ -52,13 +53,14 @@ def find_divergence_point(
     months: int = 36,
     variables: tuple[str, ...] = DEFAULT_VARIABLES,
 ) -> DivergencePoint:
-    """코호트를 최종 결과(HEALTHY vs 그 외)로 나눠, 두 그룹의 궤적이 처음으로
-    유의미하게(Cohen's d >= EFFECT_SIZE_THRESHOLD) 벌어지기 시작하는 (월차, 변수)와
-    그 지점의 분리 임계값을 찾는다.
+    """Splits the cohort by final outcome (HEALTHY vs. everything else) and finds the (month,
+    variable) where the two groups' trajectories first diverge meaningfully (Cohen's d >=
+    EFFECT_SIZE_THRESHOLD), along with the separating threshold at that point.
 
-    최종 라벨 자체가 마지막 구간 평균으로 정해지므로, "가장 크게 벌어지는 시점"을 찾으면
-    항상 마지막 달 근처로 수렴해 서사적으로 의미가 없다. 그래서 최대 분리가 아니라
-    "처음 벌어지기 시작한" 최초 시점을 찾는다.
+    Since the final label itself is determined by the last few months' average, searching for
+    the point of "biggest separation" always converges to near the final month, which makes for
+    a meaningless narrative. So instead of maximum separation, we find the first month at which
+    the split begins.
     """
     cohort_df = df[df["customer_id"].isin(cohort_ids)]
     final_labels = cohort_df[cohort_df["month"] == months].set_index("customer_id")["outcome_label"]
@@ -66,7 +68,7 @@ def find_divergence_point(
     healthy_ids = set(final_labels[final_labels == "HEALTHY"].index)
     stress_ids = set(final_labels[final_labels != "HEALTHY"].index)
     if len(healthy_ids) < 2 or len(stress_ids) < 2:
-        raise ValueError("분기점 분석을 위한 건전/스트레스 그룹 표본이 부족합니다.")
+        raise ValueError("Not enough healthy/stress samples in the cohort to analyze a divergence point.")
     minority_ratio = min(len(healthy_ids), len(stress_ids)) / (len(healthy_ids) + len(stress_ids))
 
     best_overall: DivergencePoint | None = None
@@ -102,5 +104,5 @@ def find_divergence_point(
             return best_this_month
 
     if best_overall is None:
-        raise ValueError("분기점을 찾지 못했습니다 (모든 지점에서 그룹 분산이 0).")
+        raise ValueError("No divergence point found (group variance was zero at every point).")
     return best_overall

@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qE 'pip install (torch|tensorflow|xgboost|lightgbm)' && echo 'BLOCKED: ML 학습 라이브러리 설치 금지 — 이 프로젝트는 예측 모델이 아님 (CLAUDE.md 절대 규칙 1)' && exit 2; exit 0"
+            "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qE 'pip install (torch|tensorflow|xgboost|lightgbm)' && echo 'BLOCKED: installing ML training libraries is forbidden -- this project is not a predictive model (CLAUDE.md Absolute Rule 1)' && exit 2; exit 0"
           }
         ]
       }

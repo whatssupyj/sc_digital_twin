@@ -34,7 +34,7 @@ def test_build_portfolio_relationship_ratio_matches_config():
 
 
 def test_build_portfolio_signature_takes_only_customer_ids():
-    """배정 함수는 customer_id만 받는다 — 재무 데이터를 인자로 받을 수조차 없다."""
+    """The assignment function only takes customer_ids — it can't even accept financial data as an argument."""
     params = list(inspect.signature(build_portfolio).parameters)
     assert params == [
         "customer_ids",
@@ -54,7 +54,7 @@ def test_build_portfolio_assigns_every_customer_a_known_rm():
         assert member["rm_id"] in RM_IDS
         rm_counts[member["rm_id"]] += 1
     assert sum(rm_counts.values()) == 100
-    assert all(count == 20 for count in rm_counts.values())  # 100명 / 5 RM = 균등 분배
+    assert all(count == 20 for count in rm_counts.values())  # 100 customers / 5 RMs = even split
 
 
 def test_days_since_computes_whole_days():
@@ -128,8 +128,9 @@ def test_sort_by_priority_breaks_ties_by_closer_timing():
 
 
 def test_resolve_follow_up_due_excludes_customers_completed_today():
-    """date_input 기본값이 오늘이라, 오늘 등록한 FOLLOW_UP은 완료 목록과 겹치기 쉽다 —
-    완료 목록에 있으면 후속상담 예정에서는 빠져야 같은 사람이 두 곳에 안 뜬다."""
+    """The date_input default is today, so a FOLLOW_UP logged today easily overlaps with the
+    completed list — if the customer is already in the completed list, they must be excluded
+    here too, so the same person doesn't show up in both places."""
     records = [_record(1), _record(2)]
     due_reviews = [
         {"customer_id": 1, "follow_up_date": "2026-09-01"},
@@ -143,7 +144,7 @@ def test_resolve_follow_up_due_orders_most_overdue_first():
     records = [_record(1), _record(2)]
     due_reviews = [
         {"customer_id": 1, "follow_up_date": "2026-09-05"},
-        {"customer_id": 2, "follow_up_date": "2026-08-20"},  # 더 오래 지남 -> 먼저
+        {"customer_id": 2, "follow_up_date": "2026-08-20"},  # more overdue -> comes first
     ]
     due = resolve_follow_up_due(records, due_reviews, completed_customer_ids=set())
     assert [r["customer_id"] for r in due] == [2, 1]
@@ -151,18 +152,18 @@ def test_resolve_follow_up_due_orders_most_overdue_first():
 
 def test_review_log_append_only_round_trip(tmp_path):
     db_path = tmp_path / "reviews.db"
-    append_review(1001, "2026-09-10", "COMPLETED", note="확인함", db_path=db_path)
-    append_review(1002, "2026-09-10", "FOLLOW_UP", follow_up_date="2026-10-01", follow_up_purpose="재확인", db_path=db_path)
+    append_review(1001, "2026-09-10", "COMPLETED", note="Confirmed", db_path=db_path)
+    append_review(1002, "2026-09-10", "FOLLOW_UP", follow_up_date="2026-10-01", follow_up_purpose="Re-check", db_path=db_path)
 
     reviews = load_reviews(db_path)
     assert len(reviews) == 2
     assert reviews[0]["customer_id"] == 1001
-    assert reviews[1]["follow_up_purpose"] == "재확인"
+    assert reviews[1]["follow_up_purpose"] == "Re-check"
     assert reviewed_today_ids(reviews) == {1001, 1002}
 
 
 def test_review_db_rejects_update_and_delete(tmp_path):
-    """append-only가 관례가 아니라 DB 제약이라는 걸 확인한다 — 트리거가 직접 막는다."""
+    """Confirms append-only is a DB constraint, not just a convention — a trigger blocks it directly."""
     import sqlite3
 
     import pytest
@@ -179,16 +180,16 @@ def test_review_db_rejects_update_and_delete(tmp_path):
 
 def test_due_follow_ups_includes_past_and_today_dates():
     reviews = [
-        {"customer_id": 1, "result": "FOLLOW_UP", "follow_up_date": "2026-09-01"},  # 지남 -> 예정
-        {"customer_id": 2, "result": "FOLLOW_UP", "follow_up_date": "2026-09-10"},  # 오늘 -> 예정
-        {"customer_id": 3, "result": "FOLLOW_UP", "follow_up_date": "2026-09-20"},  # 아직 -> 제외
+        {"customer_id": 1, "result": "FOLLOW_UP", "follow_up_date": "2026-09-01"},  # past -> due
+        {"customer_id": 2, "result": "FOLLOW_UP", "follow_up_date": "2026-09-10"},  # today -> due
+        {"customer_id": 3, "result": "FOLLOW_UP", "follow_up_date": "2026-09-20"},  # not yet -> excluded
     ]
     due = due_follow_ups(reviews, today="2026-09-10")
     assert {r["customer_id"] for r in due} == {1, 2}
 
 
 def test_due_follow_ups_excludes_superseded_follow_up():
-    """같은 고객을 나중에 다시 확인해 COMPLETED로 남겼으면 예전 FOLLOW_UP은 더는 예정이 아니다."""
+    """If the same customer was reviewed again later and left as COMPLETED, the old FOLLOW_UP is no longer due."""
     reviews = [
         {"customer_id": 1, "result": "FOLLOW_UP", "follow_up_date": "2026-09-01"},
         {"customer_id": 1, "result": "COMPLETED", "follow_up_date": None},

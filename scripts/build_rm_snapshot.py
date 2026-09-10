@@ -1,9 +1,10 @@
-"""RM Portfolio 고객들의 코호트 분석을 한 번 실행해 Snapshot으로 저장한다.
+"""Runs a cohort analysis once for the RM portfolio customers and stores it as a Snapshot.
 
-app/rm_view.py는 이 Snapshot만 읽고 분석을 다시 실행하지 않는다 — 화면을 열 때마다
-매칭·분기점이 재계산되면 같은 고객이 날짜에 따라 다른 결과로 보일 수 있기 때문이다.
+app/rm_view.py reads only this Snapshot and never re-runs the analysis — if matching and the
+divergence point were recomputed every time the screen opens, the same customer could show a
+different result depending on the day.
 
-실행: python -m scripts.build_rm_snapshot
+Run: python -m scripts.build_rm_snapshot
 """
 
 import json
@@ -37,8 +38,8 @@ def build_record(df: pd.DataFrame, member: dict) -> dict:
     months_from_current = divergence.month - CURRENT_MONTH
     timing_bucket = classify_timing(months_from_current, divergence.is_reliable, at_risk_now)
 
-    # asdict()는 is_reliable(@property)을 안 담고, threshold/effect_size는 numpy 스칼라라
-    # json.dumps가 못 읽는다 — 명시적으로 네이티브 타입만 골라 담는다.
+    # asdict() doesn't include is_reliable (it's an @property), and threshold/effect_size are
+    # numpy scalars that json.dumps can't read — pick out only native types explicitly.
     divergence_dict = {
         "month": int(divergence.month),
         "variable": divergence.variable,
@@ -72,10 +73,10 @@ def build_record(df: pd.DataFrame, member: dict) -> dict:
 
 
 def build_snapshot(df: pd.DataFrame) -> dict:
-    """포트폴리오를 뽑아 전부 분석하고 Snapshot dict를 만든다 (파일 I/O는 안 함).
+    """Selects the portfolio, analyzes every member, and builds the Snapshot dict (no file I/O here).
 
-    app/rm_view.py가 배포 환경에서 Snapshot 파일이 없을 때 이 함수를 그대로 불러
-    그 자리에서 만든다 — data/customers.csv 자동 생성과 같은 이유다.
+    In a deployed environment where the Snapshot file is missing, app/rm_view.py calls this
+    function directly and builds it on the spot — same reasoning as auto-generating data/customers.csv.
     """
     customer_ids = sorted(df["customer_id"].unique().tolist())
     portfolio = build_portfolio(customer_ids)
@@ -85,7 +86,7 @@ def build_snapshot(df: pd.DataFrame) -> dict:
         try:
             records.append(build_record(df, member))
         except ValueError:
-            continue  # 코호트 내 건전/스트레스 표본이 부족한 극히 드문 경우 — 건너뛴다.
+            continue  # extremely rare case where the cohort lacks enough healthy/stress samples — skip it.
 
     return {
         "snapshot_id": datetime.now(timezone.utc).date().isoformat(),
@@ -101,7 +102,7 @@ def main() -> None:
     snapshot = build_snapshot(df)
     SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
     SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"생성 완료: {SNAPSHOT_PATH} ({snapshot['portfolio_size']}명)")
+    print(f"Done: {SNAPSHOT_PATH} ({snapshot['portfolio_size']} customers)")
 
 
 if __name__ == "__main__":

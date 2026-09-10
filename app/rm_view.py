@@ -1,7 +1,7 @@
-"""RM 오늘의 업무 화면. app/main.py에서 모드 분기로 호출된다.
+"""RM Daily Review screen. Invoked as a mode branch from app/main.py.
 
-Snapshot(data/rm_snapshot.json)만 읽고, 분석(매칭·분기점)을 다시 실행하지 않는다 —
-같은 스냅샷을 오늘 다시 봐도 어제와 같은 결과가 나와야 한다.
+Reads only the Snapshot (data/rm_snapshot.json) and never re-runs the analysis (matching,
+divergence) — viewing the same snapshot again today must produce the same result as yesterday.
 """
 
 import json
@@ -39,14 +39,14 @@ CURRENT_MONTH = 12
 TOTAL_MONTHS = 36
 
 VARIABLE_LABELS = {
-    "savings_rate": "저축률",
-    "spending_growth": "지출증가율",
+    "savings_rate": "Savings Rate",
+    "spending_growth": "Spending Growth",
     "dsr": "DSR",
 }
 RESULT_LABELS = {
-    RESULT_COMPLETED: "확인 완료",
-    RESULT_FOLLOW_UP: "추가 상담 검토",
-    RESULT_MONITOR: "계속 모니터링",
+    RESULT_COMPLETED: "Completed",
+    RESULT_FOLLOW_UP: "Needs Follow-up",
+    RESULT_MONITOR: "Keep Monitoring",
 }
 
 
@@ -56,13 +56,13 @@ def load_snapshot(path: str) -> dict:
 
 
 def render_rm_daily_review(df: pd.DataFrame) -> None:
-    st.title("RM 오늘의 업무")
-    st.caption("저장된 월별 분석 결과만 봅니다 — 지금 다시 매칭하거나 분기점을 재계산하지 않습니다.")
+    st.title("RM Daily Review")
+    st.caption("Shows only the stored monthly analysis results — no re-matching or divergence recalculation happens here.")
 
     if not SNAPSHOT_PATH.exists():
-        # ponytail: data/customers.csv와 같은 이유 — 배포 환경엔 이 파일이 git에 없다.
-        # scripts/build_rm_snapshot.py를 사람이 직접 돌릴 수 없는 환경이라 그 자리에서 만든다.
-        with st.spinner("RM Portfolio 100명 분석 중입니다 (최초 1회만)..."):
+        # ponytail: same reason as data/customers.csv — this file isn't in git in a deployed
+        # environment, and there's no one to run scripts/build_rm_snapshot.py by hand there, so build it on the spot.
+        with st.spinner("Analyzing the RM portfolio of 100 (first time only)..."):
             SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
             SNAPSHOT_PATH.write_text(
                 json.dumps(build_snapshot(df), ensure_ascii=False, indent=2), encoding="utf-8"
@@ -73,10 +73,10 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     latest_by_id = latest_review_by_customer(reviews)
 
     rm_ids = sorted({record["rm_id"] for record in snapshot["records"]})
-    rm_filter = st.selectbox("담당 RM", ["전체"] + rm_ids, key="rm_filter")
+    rm_filter = st.selectbox("Owning RM", ["All"] + rm_ids, key="rm_filter")
     records_in_scope = (
         snapshot["records"]
-        if rm_filter == "전체"
+        if rm_filter == "All"
         else [record for record in snapshot["records"] if record["rm_id"] == rm_filter]
     )
 
@@ -84,11 +84,11 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     buckets = build_worklist(records_in_scope, completed_ids)
     buckets[FOLLOW_UP_DUE] = resolve_follow_up_due(records_in_scope, due_follow_ups(reviews), completed_ids)
 
-    st.caption(f"Snapshot 기준일: {snapshot['snapshot_id']} · 담당 포트폴리오 {len(records_in_scope)}명")
+    st.caption(f"Snapshot date: {snapshot['snapshot_id']} · {len(records_in_scope)} customers in this portfolio")
 
     record_by_id = {record["customer_id"]: record for record in records_in_scope}
     search_id = st.number_input(
-        "고객 ID로 바로 찾기 (오늘 목록에 없어도 위에서 고른 담당 범위면 조회됩니다)",
+        "Jump straight to a customer ID (works even if they're not in today's list, as long as they're in the scope selected above)",
         min_value=0,
         step=1,
         value=0,
@@ -97,7 +97,7 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     if search_id:
         found = record_by_id.get(int(search_id))
         if found is None:
-            st.warning(f"고객 {int(search_id)}은 이 담당 범위에 없습니다.")
+            st.warning(f"Customer {int(search_id)} is not in this scope.")
         else:
             st.divider()
             render_customer_detail(df, found, snapshot["snapshot_id"], reviews)
@@ -109,7 +109,7 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
         column.metric(BUCKET_LABELS[key], len(buckets[key]))
 
     bucket_choice = st.radio(
-        "목록",
+        "List",
         bucket_keys,
         format_func=lambda key: BUCKET_LABELS[key],
         horizontal=True,
@@ -117,17 +117,17 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
     )
     records = buckets[bucket_choice]
     if not records:
-        st.info("이 목록에는 현재 해당하는 고객이 없습니다.")
+        st.info("There are no customers in this list right now.")
         return
 
     def format_customer_option(record: dict) -> str:
         label = f"{record['customer_id']} · {record['relationship_label']}"
         previous = latest_by_id.get(record["customer_id"])
         if previous:
-            label += f" · 마지막 확인 {days_since(previous['reviewed_at'])}일 전"
+            label += f" · last reviewed {days_since(previous['reviewed_at'])} days ago"
         return label
 
-    selected_record = st.selectbox("고객 선택", records, format_func=format_customer_option)
+    selected_record = st.selectbox("Select Customer", records, format_func=format_customer_option)
     st.divider()
     render_customer_detail(df, selected_record, snapshot["snapshot_id"], reviews)
 
@@ -135,34 +135,34 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
 def render_customer_detail(df: pd.DataFrame, record: dict, snapshot_id: str, reviews: list[dict]) -> None:
     customer_id = record["customer_id"]
     divergence = record["divergence"]
-    st.subheader(f"고객 {customer_id} · {record['relationship_label']}")
+    st.subheader(f"Customer {customer_id} · {record['relationship_label']}")
 
     previous_review = latest_review_by_customer(reviews).get(customer_id)
     if previous_review is not None:
         days = days_since(previous_review["reviewed_at"])
-        day_text = "오늘" if days == 0 else f"{days}일 전"
+        day_text = "today" if days == 0 else f"{days} days ago"
         note_part = f" · {previous_review['note']}" if previous_review.get("note") else ""
-        purpose_part = f" · 다음 목적: {previous_review['follow_up_purpose']}" if previous_review.get("follow_up_purpose") else ""
+        purpose_part = f" · next purpose: {previous_review['follow_up_purpose']}" if previous_review.get("follow_up_purpose") else ""
         st.caption(
-            f"이전 확인: {day_text} ({previous_review['reviewed_at'][:10]}) · "
+            f"Last reviewed: {day_text} ({previous_review['reviewed_at'][:10]}) · "
             f"{RESULT_LABELS.get(previous_review['result'], previous_review['result'])}{note_part}{purpose_part}"
         )
 
     cols = st.columns(3)
-    cols[0].metric("저축률", f"{record['current_summary']['savings_rate']:.1%}")
-    cols[1].metric("지출증가율", f"{record['current_summary']['spending_growth']:.1%}")
+    cols[0].metric("Savings Rate", f"{record['current_summary']['savings_rate']:.1%}")
+    cols[1].metric("Spending Growth", f"{record['current_summary']['spending_growth']:.1%}")
     cols[2].metric("DSR", f"{record['current_summary']['dsr']:.1%}")
 
     if divergence["is_reliable"]:
         label = VARIABLE_LABELS.get(divergence["variable"], divergence["variable"])
-        direction = "위" if divergence["higher_is_healthier"] else "아래"
-        risk_note = "현재 위험 쪽에 있습니다" if record["at_risk_now"] else "현재 건전 쪽에 있습니다"
+        direction = "above" if divergence["higher_is_healthier"] else "below"
+        risk_note = "currently on the risk side" if record["at_risk_now"] else "currently on the healthy side"
         st.markdown(
-            f"**왜 지금 확인?** {divergence['month']}개월차에 이 코호트는 **{label} {divergence['threshold']:.1%}** "
-            f"선({direction}쪽이 건전)에서 갈렸습니다 — 이 고객은 {risk_note}."
+            f"**Why check now?** At month {divergence['month']}, this cohort split at the **{label} {divergence['threshold']:.1%}** "
+            f"line (healthy side is {direction}) — this customer is {risk_note}."
         )
     else:
-        st.markdown("**왜 지금 확인?** 뚜렷한 분기점 신호가 없어 특별한 우려 시점은 없습니다.")
+        st.markdown("**Why check now?** There's no clear divergence signal, so there's no specific point of concern.")
 
     fig = build_trajectory_figure(
         df,
@@ -190,26 +190,26 @@ def render_customer_detail(df: pd.DataFrame, record: dict, snapshot_id: str, rev
 
 
 def render_review_form(customer_id: int, snapshot_id: str) -> None:
-    st.markdown("#### 확인 결과 기록")
-    # ponytail: st.form 안의 위젯은 제출 전까지 리렌더링이 안 된다 — result에 따라
-    # 날짜/목적 입력창을 조건부로 보여줘야 하므로 result만 폼 밖에 둔다.
+    st.markdown("#### Log Review Outcome")
+    # ponytail: widgets inside st.form don't re-render until submit — since the date/purpose
+    # inputs must show conditionally based on `result`, `result` alone lives outside the form.
     result = st.radio(
-        "결과",
+        "Result",
         [RESULT_COMPLETED, RESULT_FOLLOW_UP, RESULT_MONITOR],
         format_func=lambda key: RESULT_LABELS[key],
         key=f"rm_result_{customer_id}",
     )
     with st.form(key=f"rm_review_form_{customer_id}"):
-        note = st.text_area("메모", key=f"rm_note_{customer_id}")
+        note = st.text_area("Note", key=f"rm_note_{customer_id}")
         follow_up_date_widget = None
         follow_up_purpose = None
         if result == RESULT_FOLLOW_UP:
-            follow_up_date_widget = st.date_input("다음 확인일", key=f"rm_followup_date_{customer_id}")
-            follow_up_purpose = st.text_input("재확인 목적", key=f"rm_followup_purpose_{customer_id}")
-        submitted = st.form_submit_button("저장")
+            follow_up_date_widget = st.date_input("Next Review Date", key=f"rm_followup_date_{customer_id}")
+            follow_up_purpose = st.text_input("Follow-up Purpose", key=f"rm_followup_purpose_{customer_id}")
+        submitted = st.form_submit_button("Save")
 
     if submitted:
         follow_up_date = follow_up_date_widget.isoformat() if follow_up_date_widget else None
         append_review(customer_id, snapshot_id, result, note, follow_up_date, follow_up_purpose)
-        st.success("저장했습니다.")
+        st.success("Saved.")
         st.rerun()

@@ -1,4 +1,4 @@
-"""매칭 + 결과 집계 + 분기점 분석을 한 번에 실행하는 진입점."""
+"""Single entry point that runs matching + outcome aggregation + divergence-point analysis together."""
 
 from dataclasses import dataclass
 
@@ -13,7 +13,7 @@ from engine.matching import find_cohort
 class CohortResult:
     target_customer_id: int
     observed_months: int
-    matches: list[tuple[int, float]]  # (customer_id, similarity_score) 정렬 리스트
+    matches: list[tuple[int, float]]  # sorted list of (customer_id, similarity_score)
     outcomes: OutcomeSummary
     products: ProductSummary
     divergence: DivergencePoint

@@ -1,13 +1,13 @@
 ---
 name: regen-data
-description: 페르소나 규칙 변경 후 데이터 재생성과 하위 영향 점검. /regen-data 로 호출.
+description: Regenerate data after changing persona rules, and check downstream impact. Invoke with /regen-data.
 ---
 
-# 데이터 재생성 절차
+# Data Regeneration Procedure
 
-1. data/ 아래 기존 CSV 백업 (data/_backup/타임스탬프/)
-2. seed 42로 재생성
-3. 페르소나별 결과 라벨 분포를 이전 버전과 비교 출력 (변화율 표)
-4. customer_id=1001의 궤적이 "11개월차, 서서히 악화 중" 스토리를 유지하는지 확인.
-   유지되지 않으면 중단하고 보고 — 데모 시나리오가 깨지기 때문.
-5. 테스트 재실행
+1. Back up the existing CSV under data/ (to data/_backup/<timestamp>/)
+2. Regenerate with seed 42
+3. Print a comparison of the per-persona outcome-label distribution against the previous version (a change-rate table)
+4. Confirm customer_id=1001's trajectory still tells the "month 11, slowly declining" story.
+   If it no longer does, stop and report — this would break the demo scenario.
+5. Re-run the tests

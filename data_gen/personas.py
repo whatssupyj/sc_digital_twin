@@ -1,4 +1,4 @@
-"""페르소나별 궤적 생성 파라미터 (매직 넘버는 여기에만 둔다)."""
+"""Per-persona trajectory generation parameters (all magic numbers live here only)."""
 
 PERSONA_WEIGHTS = {
     "STABLE": 0.35,
@@ -8,11 +8,13 @@ PERSONA_WEIGHTS = {
     "OVERSPEND": 0.15,
 }
 
-# start: 1개월차 기준값 / drift: 월별 추세 변화량 / noise: 월별 독립 변동(리포팅 노이즈)
-# walk: 월별 누적되는 행동 변화 불확실성(랜덤워크) — 이게 있어야 초반 궤적이 비슷해도
-# 후반부에 결과가 갈리는 "분기점" 서사가 성립한다.
-# STABLE/SLOW_DECLINE/SHOCK는 겉보기엔 같은 "평범한" 출발선에서 시작해 이후 갈라져야
-# 매칭 초반 구간(1~12개월)에서 실제로 서로 헷갈릴 수 있다. 그래서 start 값을 맞춰둔다.
+# start: month-1 baseline value / drift: month-over-month trend change / noise: independent
+# monthly variation (reporting noise) / walk: cumulative month-over-month behavioral
+# uncertainty (random walk) — without this, trajectories that look similar early on would
+# never diverge later, and the "divergence point" narrative wouldn't hold.
+# STABLE/SLOW_DECLINE/SHOCK all need to start from the same-looking "ordinary" baseline and
+# only diverge afterward, so they can actually be confused with each other during the early
+# matching window (months 1-12). Hence the shared start values.
 _TYPICAL_START = {"savings_rate": 0.17, "spending_growth": 0.007, "dsr": 0.23}
 
 PERSONA_PARAMS = {
@@ -32,7 +34,7 @@ PERSONA_PARAMS = {
         "dsr": {"start": _TYPICAL_START["dsr"], "drift": 0.0, "noise": 0.010, "walk": 0.009},
         "shock_month_range": (6, 30),
         "shock_impact": {"savings_rate": -0.11, "spending_growth": 0.035, "dsr": 0.11},
-        "shock_recovery": 0.045,  # 충격 이후 매월 완화되는 비율 (선형 감쇠)
+        "shock_recovery": 0.045,  # fraction the shock eases each month after it hits (linear decay)
     },
     "RECOVERY": {
         "savings_rate": {"start": 0.06, "drift": -0.004, "noise": 0.010, "walk": 0.009},
@@ -53,9 +55,9 @@ VALID_RANGES = {
     "dsr": (0.0, 3.0),
 }
 
-INCOME_MIN = 500_000  # 원/월, 소득 > 0 규칙 준수용 하한
+INCOME_MIN = 500_000  # KRW/month, floor to satisfy the income > 0 rule
 
-# 36개월차 결과 라벨 판정 임계값 (최근 3개월 평균 기준)
+# Outcome-label decision thresholds at month 36 (based on the most recent 3-month average)
 OUTCOME_THRESHOLDS = {
     "healthy_dsr_max": 0.32,
     "healthy_savings_min": 0.08,
@@ -65,17 +67,16 @@ OUTCOME_THRESHOLDS = {
 DEMO_CUSTOMER_ID = 1001
 DEMO_CUSTOMER_PERSONA = "SLOW_DECLINE"
 
-# 상품 필요 라벨: 36개월 궤적 전체(최종 수준 + 정점 + 추세)로 판정. 예측이 아니라
-# "이 궤적을 걸은 사람들이 실제로 어떤 상품군을 필요로 했는가"를 규칙 기반으로 분류.
-PRODUCT_LABELS = ("SAVINGS_PRODUCT", "CREDIT_LOAN", "OVERDRAFT", "CARD_LOAN_RISK", "NO_PRODUCT_NEEDED")
-
+# Product-need label: decided from the full 36-month trajectory (final level + peak + trend).
+# Not a prediction — a rule-based classification of "what product category people who walked
+# this trajectory actually needed."
 PRODUCT_THRESHOLDS = {
-    "card_loan_dsr_min": 0.50,           # 최종 DSR이 이 이상이면서
-    "card_loan_spending_trend_min": 0.006,  # 지출증가율이 후반부로 갈수록 계속 오르면 -> 카드론/리볼빙 위험군
-    "overdraft_peak_gap_min": 0.06,      # 정점 DSR과 최종 DSR의 차이가 이 이상이고
-    "overdraft_peak_dsr_min": 0.28,      # 정점 DSR 자체도 이 이상이면 -> 일시적 충격형(마이너스통장)
-    "credit_loan_dsr_min": 0.30,         # 최종 DSR이 이 이상이면서
-    "credit_loan_savings_max": 0.08,     # 저축여력이 이 미만이면 -> 신용대출
-    "savings_product_min": 0.12,         # 저축여력이 이 이상이고
-    "savings_product_dsr_max": 0.28,     # 최종 DSR이 이 이하면 -> 예적금 상품
+    "card_loan_dsr_min": 0.50,           # final DSR at or above this, and
+    "card_loan_spending_trend_min": 0.006,  # spending growth keeps rising into the back half -> card-loan/revolving risk group
+    "overdraft_peak_gap_min": 0.06,      # gap between peak DSR and final DSR at or above this, and
+    "overdraft_peak_dsr_min": 0.28,      # peak DSR itself at or above this -> temporary-shock type (overdraft)
+    "credit_loan_dsr_min": 0.30,         # final DSR at or above this, and
+    "credit_loan_savings_max": 0.08,     # savings headroom below this -> credit loan
+    "savings_product_min": 0.12,         # savings headroom at or above this, and
+    "savings_product_dsr_max": 0.28,     # final DSR at or below this -> savings product
 }

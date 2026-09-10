@@ -1,6 +1,6 @@
-"""합성 고객 궤적 생성기. 실제 고객 데이터는 절대 사용하지 않는다.
+"""Synthetic customer trajectory generator. Never uses real customer data.
 
-사용법: python -m data_gen.generate --n 5000 --months 36 --seed 42
+Usage: python -m data_gen.generate --n 5000 --months 36 --seed 42
 """
 
 import argparse
@@ -29,7 +29,8 @@ def _trend(rng: np.random.Generator, months: int, start: float, drift: float, no
     values = start + drift * t
     if extra is not None:
         values = values + extra
-    # 누적 랜덤워크: 같은 페르소나/초반 궤적이라도 개월이 지날수록 결과가 벌어지게 만든다.
+    # Cumulative random walk: makes outcomes diverge over time even for the same persona /
+    # similar early trajectory.
     values = values + np.cumsum(rng.normal(0.0, walk, size=months))
     values = values + rng.normal(0.0, noise, size=months)
     return values
@@ -82,7 +83,7 @@ def _outcome_label(dsr_final: float, savings_final: float) -> str:
 
 
 def _product_label(dsr: np.ndarray, savings_rate: np.ndarray, spending_growth: np.ndarray) -> str:
-    """36개월 궤적 전체(최종 수준 + 정점 + 후반부 추세)로 상품 필요 라벨을 판정한다."""
+    """Decides the product-need label from the full 36-month trajectory (final level + peak + back-half trend)."""
     th = PRODUCT_THRESHOLDS
     tail = slice(len(dsr) - 3, len(dsr))
     dsr_final = float(dsr[tail].mean())
@@ -157,11 +158,11 @@ def generate_population(n: int, months: int, seed: int) -> pd.DataFrame:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="FinTwin 합성 고객 궤적 생성기")
-    parser.add_argument("--n", type=int, default=5000, help="생성할 고객 수")
-    parser.add_argument("--months", type=int, default=36, help="궤적 개월 수")
-    parser.add_argument("--seed", type=int, default=42, help="난수 시드")
-    parser.add_argument("--out", type=str, default="data/customers.csv", help="출력 CSV 경로")
+    parser = argparse.ArgumentParser(description="FinTwin synthetic customer trajectory generator")
+    parser.add_argument("--n", type=int, default=5000, help="number of customers to generate")
+    parser.add_argument("--months", type=int, default=36, help="trajectory length in months")
+    parser.add_argument("--seed", type=int, default=42, help="random seed")
+    parser.add_argument("--out", type=str, default="data/customers.csv", help="output CSV path")
     args = parser.parse_args()
 
     df = generate_population(args.n, args.months, args.seed)
@@ -170,7 +171,7 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
-    print(f"생성 완료: {out_path} ({len(df):,}행 = {args.n:,}명 x {args.months}개월)")
+    print(f"Done: {out_path} ({len(df):,} rows = {args.n:,} customers x {args.months} months)")
 
 
 if __name__ == "__main__":

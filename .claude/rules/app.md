@@ -3,9 +3,10 @@ paths:
   - "app/**/*.py"
 ---
 
-# 데모 UI 규칙
-- Streamlit 위젯 상호작용마다 전체 재계산되지 않도록 @st.cache_data 필수.
-- 그래프는 plotly 사용. 유사 궤적 200개는 opacity 0.05~0.1 반투명 선으로,
-  대상 고객 궤적은 굵은 실선으로 구분.
-- 미래 구간(현재 월차 이후)은 배경색을 다르게 해 "여기부터는 코호트의 실제 결과" 표시.
-- 한국어 라벨 사용. 데모 관객은 국내 심사위원.
+# Demo UI Rules
+- `@st.cache_data` is required so a Streamlit widget interaction never triggers a full recomputation.
+- Use plotly for charts. Draw the 200 similar trajectories as translucent lines (opacity 0.05-0.1),
+  and the target customer's trajectory as a bold solid line.
+- Shade the future segment (past the current month) with a different background to mark
+  "from here on, this is the cohort's actual outcome."
+- Use English labels — the project reviews this codebase and demo in English.
