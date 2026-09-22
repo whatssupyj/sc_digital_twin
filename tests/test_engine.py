@@ -179,6 +179,41 @@ def test_find_divergence_point_detects_known_split_month():
     assert point.is_reliable is True  # splits clearly, so it's reliable
 
 
+def test_minority_ratio_gate_overrides_large_effect_size():
+    """Even when effect_size >= 0.5, a cohort where the minority group is < 25% of the total
+    must return is_reliable=False. This is the guard against STABLE-heavy cohorts where one of
+    108 comparisons (36 months x 3 variables) trips the threshold purely by chance.
+    Validated empirically in scripts/validate_divergence.py: STABLE-heavy cohorts were at or
+    below minority_ratio=0.23, and their predictions were no better than a coin flip.
+    """
+    months = 10
+    # 8 healthy, 2 stress → minority_ratio = 0.20, well below MINORITY_RATIO_THRESHOLD (0.25)
+    # Small per-customer offsets ensure pooled_var > 0 (otherwise Cohen's d is undefined and skipped).
+    offsets = {1: -0.003, 2: -0.001, 3: 0.0, 4: 0.001, 5: 0.003,
+               6: -0.002, 7: 0.002, 8: 0.0, 9: -0.001, 10: 0.001}
+    healthy_ids = list(range(1, 9))
+    stress_ids = [9, 10]
+
+    rows = []
+    for cid in healthy_ids:
+        for month in range(1, months + 1):
+            dsr = (0.20 if month < 6 else 0.15) + offsets[cid]
+            rows.append({"customer_id": cid, "month": month, "savings_rate": 0.18,
+                         "spending_growth": 0.01, "dsr": dsr, "outcome_label": "HEALTHY"})
+    for cid in stress_ids:
+        for month in range(1, months + 1):
+            dsr = (0.20 if month < 6 else 0.55) + offsets[cid]  # worsens sharply → large effect size
+            rows.append({"customer_id": cid, "month": month, "savings_rate": 0.18,
+                         "spending_growth": 0.01, "dsr": dsr, "outcome_label": "STRESS"})
+
+    df = pd.DataFrame(rows)
+    point = find_divergence_point(df, healthy_ids + stress_ids, months=months)
+
+    assert point.minority_ratio == pytest.approx(0.2)
+    assert point.effect_size >= 0.5, "Effect size should be large — the groups DO clearly split"
+    assert point.is_reliable is False, "Large effect_size alone must not make it reliable when minority_ratio < 0.25"
+
+
 def test_divergence_is_unreliable_when_groups_barely_differ():
     """If the two group means differ far less than the within-group spread (effect_size < 0.5),
     the divergence point could just be noise, so is_reliable must be False."""
@@ -208,8 +243,83 @@ def test_divergence_is_unreliable_when_groups_barely_differ():
 
 def test_analyze_cohort_end_to_end(population_df):
     result = analyze_cohort(population_df, target_customer_id=1001, observed_months=12, top_n=50)
+
+    # shape
     assert result.target_customer_id == 1001
     assert len(result.matches) == 50
     assert result.outcomes.cohort_size == 50
     assert result.products.cohort_size == 50
+
+    # target customer excluded from own cohort
+    assert all(cid != 1001 for cid, _ in result.matches)
+
+    # matches sorted by descending similarity and all scores are finite
+    scores = [s for _, s in result.matches]
+    assert scores == sorted(scores, reverse=True)
+    assert all(-1.0 <= s <= 1.0 for s in scores)
+
+    # top match is meaningfully similar (not just the least dissimilar)
+    assert scores[0] > 0.5, f"Top match similarity too low: {scores[0]:.3f}"
+
+    # outcome and product distributions are complete and sum to 1
+    assert set(result.outcomes.counts) == {"HEALTHY", "STRESS", "DELINQUENT"}
+    assert sum(result.outcomes.counts.values()) == 50
+    assert pytest.approx(sum(result.outcomes.ratios.values()), abs=1e-6) == 1.0
+
+    assert set(result.products.counts) == {"SAVINGS_PRODUCT", "CREDIT_LOAN", "OVERDRAFT", "CARD_LOAN_RISK", "NO_PRODUCT_NEEDED"}
+    assert sum(result.products.counts.values()) == 50
+
+    # divergence fields are valid
     assert 1 <= result.divergence.month <= 36
+    assert result.divergence.variable in ("savings_rate", "spending_growth", "dsr")
+    assert isinstance(result.divergence.higher_is_healthier, bool)
+
+
+def test_slow_decline_matches_stable_in_observation_window(population_df):
+    """Core matching assumption: SLOW_DECLINE and STABLE share the same start values, so they
+    look indistinguishable in months 1-12. Alex's top-50 cohort should contain STABLE customers —
+    if it doesn't, the 'we don't know yet' narrative has no basis."""
+    matches = find_cohort(population_df, target_customer_id=1001, observed_months=12, top_n=50)
+    matched_ids = {cid for cid, _ in matches}
+
+    persona_at_month1 = population_df[population_df["month"] == 1].set_index("customer_id")["persona"]
+    matched_personas = persona_at_month1[persona_at_month1.index.isin(matched_ids)]
+
+    stable_count = (matched_personas == "STABLE").sum()
+    assert stable_count > 0, (
+        "No STABLE customers in Alex's top-50 cohort — SLOW_DECLINE and STABLE trajectories "
+        "should look similar at month 12, but the matching isn't finding them."
+    )
+
+
+@pytest.fixture(scope="module")
+def alex_result(population_df) -> "CohortResult":
+    return analyze_cohort(population_df, target_customer_id=1001, observed_months=12, top_n=200)
+
+
+def test_alex_divergence_is_reliable(alex_result):
+    """The demo narrative depends on a clear divergence signal — if is_reliable is False,
+    the pitch line 'paths split at month X' has no basis."""
+    assert alex_result.divergence.is_reliable, (
+        f"Divergence not reliable: effect_size={alex_result.divergence.effect_size}, "
+        f"minority_ratio={alex_result.divergence.minority_ratio}"
+    )
+
+
+def test_alex_cohort_has_meaningful_stress_ratio(alex_result):
+    """Alex is SLOW_DECLINE — his cohort should contain a significant stress/delinquent share.
+    If the ratio is near zero, the 'people who walked the same path ended up in trouble' story collapses."""
+    non_healthy = alex_result.outcomes.ratios["STRESS"] + alex_result.outcomes.ratios["DELINQUENT"]
+    assert non_healthy >= 0.25, f"Non-healthy ratio too low for SLOW_DECLINE story: {non_healthy:.1%}"
+
+
+def test_alex_divergence_month_is_before_observation_window(alex_result):
+    """Alex's cohort diverges at month 5 — already 7 months before the observation window.
+    This is the correct pitch frame: 'the signal was already in the data.'
+    The UI renders this as 'paths had already split N months before this point' (gap < 0 branch).
+    If this shifts past month 12, the pitch framing needs to change from 'already split' to 'split ahead'.
+    """
+    assert alex_result.divergence.month < 12, (
+        f"Divergence moved to month {alex_result.divergence.month} — pitch framing needs updating "
+        f"(currently assumes 'already split before month 12')"
+    )

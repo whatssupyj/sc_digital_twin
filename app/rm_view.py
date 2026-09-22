@@ -18,6 +18,7 @@ from rm.daily_review import (
     MONITOR,
     REVIEW_NOW,
     UPCOMING,
+    WEAK_SIGNAL,
     build_worklist,
     resolve_follow_up_due,
 )
@@ -47,6 +48,16 @@ RESULT_LABELS = {
     RESULT_COMPLETED: "Completed",
     RESULT_FOLLOW_UP: "Needs Follow-up",
     RESULT_MONITOR: "Keep Monitoring",
+}
+
+# Maps the cohort's dominant product-need label to a concrete bank action.
+# Not a recommendation for this specific customer — shows what the cohort actually needed.
+PRODUCT_ACTIONS = {
+    "SAVINGS_PRODUCT":   "Recommend auto-transfer savings product",
+    "CREDIT_LOAN":       "Review credit limit / offer loan consolidation",
+    "OVERDRAFT":         "Introduce short-term liquidity support product",
+    "CARD_LOAN_RISK":    "Contact customer + review card loan limit",
+    "NO_PRODUCT_NEEDED": "Monitor only — no product action needed",
 }
 
 
@@ -103,7 +114,7 @@ def render_rm_daily_review(df: pd.DataFrame) -> None:
             render_customer_detail(df, found, snapshot["snapshot_id"], reviews)
             return
 
-    bucket_keys = [REVIEW_NOW, UPCOMING, MONITOR, FOLLOW_UP_DUE, COMPLETED_TODAY]
+    bucket_keys = [REVIEW_NOW, UPCOMING, MONITOR, WEAK_SIGNAL, FOLLOW_UP_DUE, COMPLETED_TODAY]
     cols = st.columns(len(bucket_keys))
     for column, key in zip(cols, bucket_keys):
         column.metric(BUCKET_LABELS[key], len(buckets[key]))
@@ -156,13 +167,14 @@ def render_customer_detail(df: pd.DataFrame, record: dict, snapshot_id: str, rev
     if divergence["is_reliable"]:
         label = VARIABLE_LABELS.get(divergence["variable"], divergence["variable"])
         direction = "above" if divergence["higher_is_healthier"] else "below"
-        risk_note = "currently on the risk side" if record["at_risk_now"] else "currently on the healthy side"
+        risk_note = "currently on the same side as the cohort's risk group" if record["at_risk_now"] else "currently on the same side as the cohort's healthy group"
         st.markdown(
-            f"**Why check now?** At month {divergence['month']}, this cohort split at the **{label} {divergence['threshold']:.1%}** "
-            f"line (healthy side is {direction}) — this customer is {risk_note}."
+            f"**Why check now?** In this cohort, paths split at month {divergence['month']}, at the **{label} {divergence['threshold']:.1%}** "
+            f"line (healthy side is {direction}) — this customer is {risk_note} of that line."
         )
+        st.caption("Based on the cohort's actual past outcomes, not a prediction for this customer.")
     else:
-        st.markdown("**Why check now?** There's no clear divergence signal, so there's no specific point of concern.")
+        st.markdown("**Why check now?** There's no clear divergence signal in this cohort, so there's no specific point of concern.")
 
     fig = build_trajectory_figure(
         df,
@@ -185,6 +197,12 @@ def render_customer_detail(df: pd.DataFrame, record: dict, snapshot_id: str, rev
         )
     with col_product:
         st.plotly_chart(build_product_pie_chart(record["products"]), width="stretch", key=f"rm_product_{customer_id}")
+        st.caption("Distribution from rule-based classification of the cohort's actual 36-month trajectories — not a prediction about this customer.")
+
+    dominant_product = max(record["products"], key=lambda k: record["products"][k])
+    action = PRODUCT_ACTIONS.get(dominant_product, "")
+    if action:
+        st.info(f"**Suggested action based on cohort outcomes:** {action}", icon="🏦")
 
     render_review_form(customer_id, snapshot_id)
 

@@ -4,6 +4,7 @@ from rm.daily_review import (
     COMPLETED_TODAY,
     MONITOR,
     REVIEW_NOW,
+    WEAK_SIGNAL,
     UPCOMING,
     build_worklist,
     classify_timing,
@@ -68,8 +69,8 @@ def test_is_customer_at_risk_now_respects_direction():
     assert is_customer_at_risk_now(0.50, threshold=0.30, higher_is_healthier=False) is True
 
 
-def test_classify_timing_unreliable_signal_is_monitor():
-    assert classify_timing(months_from_current=1, is_reliable=False, is_at_risk_now=True) == MONITOR
+def test_classify_timing_unreliable_signal_is_weak_signal():
+    assert classify_timing(months_from_current=1, is_reliable=False, is_at_risk_now=True) == WEAK_SIGNAL
 
 
 def test_classify_timing_far_future_is_monitor():

@@ -1,0 +1,6 @@
+@echo off
+echo Installing dependencies...
+pip install -r requirements.txt
+echo.
+echo Starting FinTwin (data will be generated on first run)...
+streamlit run app/main.py

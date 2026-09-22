@@ -3,6 +3,7 @@
 REVIEW_NOW = "REVIEW_NOW"
 UPCOMING = "UPCOMING"
 MONITOR = "MONITOR"
+WEAK_SIGNAL = "WEAK_SIGNAL"
 FOLLOW_UP_DUE = "FOLLOW_UP_DUE"
 COMPLETED_TODAY = "COMPLETED_TODAY"
 
@@ -10,6 +11,7 @@ BUCKET_LABELS = {
     REVIEW_NOW: "Review Now",
     UPCOMING: "Coming Up",
     MONITOR: "Monitoring",
+    WEAK_SIGNAL: "Weak Signal",
     FOLLOW_UP_DUE: "Follow-up Due",
     COMPLETED_TODAY: "Completed Today",
 }
@@ -39,13 +41,13 @@ def is_customer_at_risk_now(value_at_current_month: float, threshold: float, hig
 def classify_timing(months_from_current: int, is_reliable: bool, is_at_risk_now: bool) -> str:
     """Decides today's work bucket from just the divergence timing and current risk status.
 
-    - If the signal is weak (is_reliable=False), we can't even trust when it would split -> MONITOR.
+    - If the signal is weak (is_reliable=False), we can't even trust when it would split -> WEAK_SIGNAL.
     - If the divergence point is 5+ months away, it isn't urgent yet -> MONITOR.
     - If it's within 2 months (including already past) and currently on the risk side -> review now.
     - Otherwise (within 2 months but still healthy, or 3-4 months out) -> coming up.
     """
     if not is_reliable:
-        return MONITOR
+        return WEAK_SIGNAL
     if months_from_current >= 5:
         return MONITOR
     if months_from_current <= 2 and is_at_risk_now:
@@ -54,20 +56,20 @@ def classify_timing(months_from_current: int, is_reliable: bool, is_at_risk_now:
 
 
 def build_worklist(records: list[dict], completed_customer_ids: set[int]) -> dict[str, list[dict]]:
-    """Splits Snapshot records into 4 work buckets. A customer reviewed today goes to the
+    """Splits Snapshot records into 5 work buckets. A customer reviewed today goes to the
     completed list regardless of their original bucket.
 
-    REVIEW_NOW/UPCOMING/MONITOR come back sorted by relationship priority, then by how close
-    the divergence point is — so even with dozens of people in one bucket, the screen decides
-    which one to look at first.
+    REVIEW_NOW/UPCOMING/MONITOR/WEAK_SIGNAL come back sorted by relationship priority, then by
+    how close the divergence point is — so even with dozens of people in one bucket, the screen
+    decides which one to look at first.
     """
-    buckets: dict[str, list[dict]] = {REVIEW_NOW: [], UPCOMING: [], MONITOR: [], COMPLETED_TODAY: []}
+    buckets: dict[str, list[dict]] = {REVIEW_NOW: [], UPCOMING: [], MONITOR: [], WEAK_SIGNAL: [], COMPLETED_TODAY: []}
     for record in records:
         if record["customer_id"] in completed_customer_ids:
             buckets[COMPLETED_TODAY].append(record)
         else:
             buckets[record["timing_bucket"]].append(record)
-    for key in (REVIEW_NOW, UPCOMING, MONITOR):
+    for key in (REVIEW_NOW, UPCOMING, MONITOR, WEAK_SIGNAL):
         buckets[key] = sort_by_priority(buckets[key])
     return buckets
 

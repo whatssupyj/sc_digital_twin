@@ -1,7 +1,7 @@
 """FinTwin demo UI. Run: streamlit run app/main.py
 
 4-scene pitch structure: ① Current State → ② Actual Outcomes of People on the Same Path
-→ ③ Divergence Point → ④ What to Change Right Now
+→ ③ Divergence Point → ④ What the Cohort's Outcomes Suggest
 """
 
 import sys
@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from app.charts import build_outcome_pie_chart, build_product_pie_chart, build_trajectory_figure
-from app.rm_view import render_rm_daily_review
+from app.rm_view import PRODUCT_ACTIONS, render_rm_daily_review
 from data_gen.generate import generate_population
 from engine.cohort import CohortResult, analyze_cohort
 from engine.loader import load_customers
@@ -103,60 +103,73 @@ def render_cohort_outcomes(df: pd.DataFrame, result: CohortResult, customer_id: 
 
 
 def render_divergence_countdown(result: CohortResult) -> None:
-    st.subheader("③ Divergence Point — when did the two paths split")
+    st.subheader("③ Divergence Point — where similar past trajectories split")
     divergence = result.divergence
 
     if not divergence.is_reliable:
         st.success(
             f"Most of the {result.outcomes.cohort_size} similar customers stayed on a stable path — "
-            "no clear divergence point emerged."
+            "no clear divergence point emerged in this cohort."
         )
-        st.caption("The gap between the cohort's healthy/stress groups isn't large enough to pin down a specific divergence point.")
+        st.caption(
+            "This is a pattern observed in past cohort outcomes, not a forecast for this customer. "
+            "The gap between the cohort's healthy/stress groups isn't large enough to pin down a specific divergence point."
+        )
         return
 
     gap = divergence.month - CURRENT_MONTH
 
     if gap > 0:
-        status = f"**{gap} months until the divergence point** (month {divergence.month})"
+        status = f"in this cohort, paths had already split by **{gap} months after** this point (month {divergence.month})"
     elif gap < 0:
-        status = f"The divergence point (month {divergence.month}) has already **passed {-gap} months ago**"
+        status = f"in this cohort, paths had already split **{-gap} months before** this point (month {divergence.month})"
     else:
-        status = "**This is the divergence point, right now.**"
+        status = f"in this cohort, paths split **right around this point** (month {divergence.month})"
 
-    st.info(f"Currently at month {CURRENT_MONTH}. {status}")
+    st.info(f"This customer is currently at month {CURRENT_MONTH}. Among similar past trajectories, {status}.")
+    st.caption("Based on when past cohort members' paths actually diverged — not a prediction of what will happen to this customer.")
 
     label = VARIABLE_LABELS.get(divergence.variable, divergence.variable)
     direction = "above" if divergence.higher_is_healthier else "below"
     st.markdown(
-        f"At **month {divergence.month}**, this cohort's path split at the **{label} {divergence.threshold:.1%}** "
-        f"line — customers who ended up healthy were **{direction}** that line."
+        f"Among this cohort, paths split at **month {divergence.month}**, at the **{label} {divergence.threshold:.1%}** "
+        f"line — cohort members who ended up healthy were **{direction}** that line."
     )
 
 
 def render_action_card(result: CohortResult) -> None:
-    st.subheader("④ What Should Change Right Now")
+    st.subheader("④ What the Cohort's Actual Outcomes Show")
     divergence = result.divergence
 
     if not divergence.is_reliable:
         with st.container(border=True):
-            st.markdown("#### Recommended Action")
-            st.markdown("Keep your current financial trend.")
+            st.markdown("#### Cohort-Based Signal (not a forecast)")
+            st.markdown("Most similar past customers stayed healthy over their full 36-month trajectory.")
             st.caption(
                 f"Most of the {result.outcomes.cohort_size} customers with a similar {CURRENT_MONTH}-month trajectory stayed stable — "
-                "there's no clear signal that a specific metric needs to improve."
+                "this reflects what happened to them, not a prediction for this specific customer."
             )
+        dominant_product = max(result.products.counts, key=lambda k: result.products.counts[k])
+        action = PRODUCT_ACTIONS.get(dominant_product, "")
+        if action:
+            st.info(f"**Suggested action based on cohort outcomes:** {action}", icon="🏦")
         return
 
     label = VARIABLE_LABELS.get(divergence.variable, divergence.variable)
     direction = "above" if divergence.higher_is_healthier else "below"
 
     with st.container(border=True):
-        st.markdown("#### Recommended Action")
-        st.markdown(f"Keep {label} **{direction} {divergence.threshold:.1%}**.")
+        st.markdown("#### Cohort-Based Signal (not a forecast)")
+        st.markdown(f"Among similar past customers, those who stayed {label} **{direction} {divergence.threshold:.1%}** ended up in the healthy group.")
         st.caption(
-            f"Based on the {result.outcomes.cohort_size} customers with a similar {CURRENT_MONTH}-month trajectory — "
-            f"most who stayed {direction} this line ended up healthy."
+            f"Based on the actual outcomes of {result.outcomes.cohort_size} synthetic customers with a similar {CURRENT_MONTH}-month trajectory — "
+            f"this shows what happened to them, not a forecast for this customer."
         )
+
+    dominant_product = max(result.products.counts, key=lambda k: result.products.counts[k])
+    action = PRODUCT_ACTIONS.get(dominant_product, "")
+    if action:
+        st.info(f"**Suggested action based on cohort outcomes:** {action}", icon="🏦")
 
 
 def main() -> None:
