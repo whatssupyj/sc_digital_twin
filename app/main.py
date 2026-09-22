@@ -15,7 +15,8 @@ import pandas as pd
 import streamlit as st
 
 from app.charts import build_outcome_pie_chart, build_product_pie_chart, build_trajectory_figure
-from app.rm_view import PRODUCT_TALKING_POINTS, render_rm_daily_review
+from app.product_actions import PRODUCT_TALKING_POINTS
+from app.rm_view import render_rm_daily_review
 from data_gen.generate import generate_population
 from engine.cohort import CohortResult, analyze_cohort
 from engine.loader import load_customers
@@ -174,9 +175,9 @@ def render_action_card(result: CohortResult) -> None:
         )
 
     dominant_product = max(result.products.counts, key=lambda k: result.products.counts[k])
-    action = PRODUCT_ACTIONS.get(dominant_product, "")
-    if action:
-        st.info(f"**Suggested action based on cohort outcomes:** {action}", icon="🏦")
+    talking_point = PRODUCT_TALKING_POINTS.get(dominant_product, "")
+    if talking_point:
+        st.info(f"**Consultation talking point (based on cohort outcomes):** {talking_point}", icon="💬")
 
 
 def main() -> None:

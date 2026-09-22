@@ -39,6 +39,7 @@ PRODUCT_COLORS = {
 }
 
 
+
 def build_trajectory_figure(
     df: pd.DataFrame,
     cohort_ids: list[int],
