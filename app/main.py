@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from app.charts import build_outcome_pie_chart, build_product_pie_chart, build_trajectory_figure
-from app.rm_view import PRODUCT_ACTIONS, render_rm_daily_review
+from app.rm_view import PRODUCT_TALKING_POINTS, render_rm_daily_review
 from data_gen.generate import generate_population
 from engine.cohort import CohortResult, analyze_cohort
 from engine.loader import load_customers
@@ -107,13 +107,15 @@ def render_divergence_countdown(result: CohortResult) -> None:
     divergence = result.divergence
 
     if not divergence.is_reliable:
-        st.success(
-            f"Most of the {result.outcomes.cohort_size} similar customers stayed on a stable path — "
-            "no clear divergence point emerged in this cohort."
+        healthy_pct = result.outcomes.ratios["HEALTHY"]
+        st.info(
+            f"No clear divergence point found in this cohort of {result.outcomes.cohort_size} customers — "
+            "the gap between healthy and stress groups isn't sharp enough to pin down a specific split moment."
         )
         st.caption(
-            "This is a pattern observed in past cohort outcomes, not a forecast for this customer. "
-            "The gap between the cohort's healthy/stress groups isn't large enough to pin down a specific divergence point."
+            f"Actual cohort outcome: {healthy_pct:.0%} ended up healthy at month 36, "
+            f"{1 - healthy_pct:.0%} ended up in stress or delinquency. "
+            "This is what happened to past customers with a similar trajectory — not a forecast for this customer."
         )
         return
 
@@ -142,17 +144,22 @@ def render_action_card(result: CohortResult) -> None:
     divergence = result.divergence
 
     if not divergence.is_reliable:
+        healthy_pct = result.outcomes.ratios["HEALTHY"]
         with st.container(border=True):
             st.markdown("#### Cohort-Based Signal (not a forecast)")
-            st.markdown("Most similar past customers stayed healthy over their full 36-month trajectory.")
-            st.caption(
-                f"Most of the {result.outcomes.cohort_size} customers with a similar {CURRENT_MONTH}-month trajectory stayed stable — "
-                "this reflects what happened to them, not a prediction for this specific customer."
+            st.markdown(
+                "No specific divergence point found — the split between healthy and stress groups "
+                "isn't sharp enough to identify a single trigger moment."
             )
+            st.markdown(
+                f"Actual cohort outcome: **{healthy_pct:.0%}** of the {result.outcomes.cohort_size} "
+                "similar past customers ended up healthy at month 36."
+            )
+            st.caption("This reflects what happened to past customers with a similar trajectory — not a forecast for this customer.")
         dominant_product = max(result.products.counts, key=lambda k: result.products.counts[k])
-        action = PRODUCT_ACTIONS.get(dominant_product, "")
-        if action:
-            st.info(f"**Suggested action based on cohort outcomes:** {action}", icon="🏦")
+        talking_point = PRODUCT_TALKING_POINTS.get(dominant_product, "")
+        if talking_point:
+            st.info(f"**Consultation talking point (based on cohort outcomes):** {talking_point}", icon="💬")
         return
 
     label = VARIABLE_LABELS.get(divergence.variable, divergence.variable)
